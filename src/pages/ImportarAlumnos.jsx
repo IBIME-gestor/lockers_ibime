@@ -70,6 +70,7 @@ export default function ImportarAlumnos() {
                 <tr>
                   <Th>Matrícula</Th>
                   <Th>Nombre</Th>
+                  <Th>Correo alumno</Th>
                   <Th>Grupo español</Th>
                   <Th>Grupo inglés</Th>
                   <Th>Tutor</Th>
@@ -80,6 +81,7 @@ export default function ImportarAlumnos() {
                   <tr key={a.matricula} className="border-t border-panel-100">
                     <Td>{a.matricula}</Td>
                     <Td>{a.nombre}</Td>
+                    <Td>{a.correoAlumno}</Td>
                     <Td>{a.grupoEspanol}</Td>
                     <Td>{a.grupoIngles}</Td>
                     <Td>{a.tutorNombre}</Td>
