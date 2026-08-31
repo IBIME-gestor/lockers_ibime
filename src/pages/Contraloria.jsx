@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { obtenerAlumnos } from '../services/students'
+import { formatoLocker } from '../utils/lockerFormat'
 import * as XLSX from 'xlsx'
 
 export default function Contraloria() {
@@ -14,30 +15,61 @@ export default function Contraloria() {
 
   const porGrupo = useMemo(() => {
     const mapa = {}
-    alumnos.forEach((a) => {
-      const key = a.grupoEspanol || 'Sin grupo'
-      if (!mapa[key]) mapa[key] = { total: 0, asignados: 0 }
+
+    alumnos.forEach((alumno) => {
+      const key =
+        alumno.grupoEspanol || 'Sin grupo'
+
+      if (!mapa[key]) {
+        mapa[key] = {
+          total: 0,
+          asignados: 0,
+        }
+      }
+
       mapa[key].total += 1
-      if (a.lockerAsignado) mapa[key].asignados += 1
+
+      if (alumno.lockerAsignado) {
+        mapa[key].asignados += 1
+      }
     })
-    return Object.entries(mapa).sort(([a], [b]) => a.localeCompare(b, 'es'))
+
+    return Object.entries(mapa).sort(
+      ([a], [b]) =>
+        a.localeCompare(b, 'es')
+    )
   }, [alumnos])
 
   function exportarExcel() {
-    const filas = alumnos.map((a) => ({
-      Matricula: a.matricula,
-      Nombre: a.nombre,
-      'Grupo español': a.grupoEspanol,
-      'Grupo inglés': a.grupoIngles,
-      Tutor: a.tutorNombre,
-      Edificio: a.lockerAsignado?.edificio ?? '',
-      Planta: a.lockerAsignado?.planta ?? '',
-      Locker: a.lockerAsignado?.numero ?? '',
+    const filas = alumnos.map((alumno) => ({
+      Matricula: alumno.matricula,
+      Nombre: alumno.nombre,
+      'Correo alumno': alumno.correoAlumno ?? '',
+      'Grupo español': alumno.grupoEspanol,
+      'Grupo inglés': alumno.grupoIngles,
+      Tutor: alumno.tutorNombre,
+
+      Locker: formatoLocker(
+        alumno.lockerAsignado
+      ),
     }))
-    const hoja = XLSX.utils.json_to_sheet(filas)
-    const libro = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(libro, hoja, 'Asignaciones')
-    XLSX.writeFile(libro, 'asignacion-lockers.xlsx')
+
+    const hoja =
+      XLSX.utils.json_to_sheet(filas)
+
+    const libro =
+      XLSX.utils.book_new()
+
+    XLSX.utils.book_append_sheet(
+      libro,
+      hoja,
+      'Asignaciones'
+    )
+
+    XLSX.writeFile(
+      libro,
+      'asignacion-lockers.xlsx'
+    )
   }
 
   return (
@@ -45,8 +77,10 @@ export default function Contraloria() {
       <h1 className="mb-1 font-display text-2xl font-semibold text-panel-900">
         Contraloría / Reportes
       </h1>
+
       <p className="mb-6 text-panel-500">
-        Vista de solo lectura para auditar el avance de la asignación por grupo.
+        Vista de solo lectura para auditar el avance
+        de la asignación por grupo.
       </p>
 
       <button
@@ -57,7 +91,9 @@ export default function Contraloria() {
       </button>
 
       {cargando ? (
-        <p className="text-panel-500">Cargando...</p>
+        <p className="text-panel-500">
+          Cargando...
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-panel-200 bg-white">
           <table className="min-w-full text-left text-sm">
@@ -69,15 +105,35 @@ export default function Contraloria() {
                 <Th>Avance</Th>
               </tr>
             </thead>
+
             <tbody>
-              {porGrupo.map(([grupo, datos]) => (
-                <tr key={grupo} className="border-t border-panel-100">
-                  <Td>{grupo}</Td>
-                  <Td>{datos.total}</Td>
-                  <Td>{datos.asignados}</Td>
-                  <Td>{Math.round((datos.asignados / datos.total) * 100)}%</Td>
-                </tr>
-              ))}
+              {porGrupo.map(
+                ([grupo, datos]) => (
+                  <tr
+                    key={grupo}
+                    className="border-t border-panel-100"
+                  >
+                    <Td>{grupo}</Td>
+
+                    <Td>
+                      {datos.total}
+                    </Td>
+
+                    <Td>
+                      {datos.asignados}
+                    </Td>
+
+                    <Td>
+                      {Math.round(
+                        (datos.asignados /
+                          datos.total) *
+                          100
+                      )}
+                      %
+                    </Td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
@@ -87,8 +143,17 @@ export default function Contraloria() {
 }
 
 function Th({ children }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>
+  return (
+    <th className="px-3 py-2 font-medium">
+      {children}
+    </th>
+  )
 }
+
 function Td({ children }) {
-  return <td className="px-3 py-2">{children}</td>
+  return (
+    <td className="px-3 py-2">
+      {children}
+    </td>
+  )
 }
