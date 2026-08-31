@@ -3,17 +3,6 @@ import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db, googleProvider } from '../firebase'
 
-/*
-  Modelo de roles:
-  - administrador: acceso total (usuarios, alumnos, lockers, reportes)
-  - supervisor: puede ver y asignar lockers de cualquier grupo, revisar avances
-  - tutor: solo ve y asigna lockers de los grupos que tiene asignados
-  - contraloria: acceso de solo lectura a todo (auditoría, reportes, historial)
-
-  Cada documento en /usuarios/{uid} tiene:
-  { nombre, correo, rol, grupos: ['1A','1B', ...] } // "grupos" solo aplica a tutores
-*/
-
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -23,45 +12,100 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('=== AUTH STATE ===')
+      console.log('Usuario:', firebaseUser)
+      
       setUser(firebaseUser)
+
       if (firebaseUser) {
-        const snap = await getDoc(doc(db, 'usuarios', firebaseUser.uid))
-        setPerfil(snap.exists() ? snap.data() : null)
+        try {
+          const uid = firebaseUser.uid
+
+          console.log('UID:', uid)
+          console.log('Email:', firebaseUser.email)
+          console.log('Buscando documento:', `usuarios/${uid}`)
+
+          const referencia = doc(db, 'usuarios', uid)
+          const snap = await getDoc(referencia)
+
+          console.log('¿Documento existe?:', snap.exists())
+
+          if (snap.exists()) {
+            console.log('Perfil encontrado:', snap.data())
+            setPerfil(snap.data())
+          } else {
+            console.error('NO EXISTE EL PERFIL EN FIRESTORE')
+            setPerfil(null)
+          }
+        } catch (error) {
+          console.error('ERROR LEYENDO PERFIL:', error)
+          setPerfil(null)
+        }
       } else {
         setPerfil(null)
       }
+
       setCargando(false)
+      console.log('==================')
     })
+
     return unsub
   }, [])
 
-  // Inicia sesión con la cuenta institucional de Google.
-  // Si el correo no es del dominio permitido, o si la cuenta no tiene un
-  // perfil dado de alta en /usuarios, se cierra la sesión y se avisa.
   const loginWithGoogle = async () => {
-    const resultado = await signInWithPopup(auth, googleProvider)
-    const correo = resultado.user.email || ''
-    const dominioPermitido = import.meta.env.VITE_ALLOWED_DOMAIN
+    try {
+      console.log('=== INICIANDO LOGIN GOOGLE ===')
 
-    if (
-      dominioPermitido &&
-      !correo.toLowerCase().endsWith(`@${dominioPermitido.toLowerCase()}`)
-    ) {
-      await signOut(auth)
-      throw new Error(
-        `Usa tu cuenta institucional (@${dominioPermitido}) para iniciar sesión.`
-      )
+      const resultado = await signInWithPopup(auth, googleProvider)
+
+      const correo = resultado.user.email || ''
+      const uid = resultado.user.uid
+      const dominioPermitido = import.meta.env.VITE_ALLOWED_DOMAIN
+
+      console.log('Correo:', correo)
+      console.log('UID:', uid)
+      console.log('Dominio permitido:', dominioPermitido)
+      console.log('Proyecto Firebase:', import.meta.env.VITE_FIREBASE_PROJECT_ID)
+
+      if (
+        dominioPermitido &&
+        !correo.toLowerCase().endsWith(`@${dominioPermitido.toLowerCase()}`)
+      ) {
+        await signOut(auth)
+
+        throw new Error(
+          `Usa tu cuenta institucional (@${dominioPermitido}) para iniciar sesión.`
+        )
+      }
+
+      const referencia = doc(db, 'usuarios', uid)
+
+      console.log('Buscando:', `usuarios/${uid}`)
+
+      const snap = await getDoc(referencia)
+
+      console.log('Documento existe:', snap.exists())
+
+      if (!snap.exists()) {
+        console.error('NO SE ENCONTRÓ EL USUARIO EN FIRESTORE')
+        console.error('UID buscado:', uid)
+
+        await signOut(auth)
+
+        throw new Error(
+          'Tu cuenta aún no tiene acceso a esta plataforma. Pide al administrador que te dé de alta en "Usuarios y roles".'
+        )
+      }
+
+      console.log('PERFIL ENCONTRADO:', snap.data())
+      console.log('=== LOGIN CORRECTO ===')
+
+      return resultado
+
+    } catch (error) {
+      console.error('ERROR DURANTE LOGIN:', error)
+      throw error
     }
-
-    const snap = await getDoc(doc(db, 'usuarios', resultado.user.uid))
-    if (!snap.exists()) {
-      await signOut(auth)
-      throw new Error(
-        'Tu cuenta aún no tiene acceso a esta plataforma. Pide al administrador que te dé de alta en "Usuarios y roles".'
-      )
-    }
-
-    return resultado
   }
 
   const logout = () => signOut(auth)
@@ -69,9 +113,20 @@ export function AuthProvider({ children }) {
   const tienePermiso = (rolesPermitidos) =>
     perfil && rolesPermitidos.includes(perfil.rol)
 
-  const value = { user, perfil, cargando, loginWithGoogle, logout, tienePermiso }
+  const value = {
+    user,
+    perfil,
+    cargando,
+    loginWithGoogle,
+    logout,
+    tienePermiso
+  }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export const useAuth = () => useContext(AuthContext)
