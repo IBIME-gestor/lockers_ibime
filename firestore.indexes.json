@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "lockers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "edificio", "order": "ASCENDING" },
+        { "fieldPath": "planta", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

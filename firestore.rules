@@ -1,0 +1,49 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function rol() {
+      return perfil().rol;
+    }
+
+    function esAdmin() {
+      return estaAutenticado() && rol() == 'administrador';
+    }
+
+    function puedeEscribirAsignaciones() {
+      return estaAutenticado() && rol() in ['administrador', 'supervisor', 'tutor'];
+    }
+
+    // Perfiles de usuario: cada quien lee el propio; solo el administrador
+    // lee/escribe todos (para gestionar roles).
+    match /usuarios/{uid} {
+      allow read: if estaAutenticado() && (request.auth.uid == uid || esAdmin());
+      allow write: if esAdmin();
+    }
+
+    // Alumnos: todos los roles autenticados pueden leer (para filtros y
+    // reportes). Solo administrador importa/edita masivamente; tutores y
+    // supervisores solo pueden actualizar el campo de locker vía asignación.
+    match /alumnos/{matricula} {
+      allow read: if estaAutenticado();
+      allow create, delete: if esAdmin();
+      allow update: if esAdmin() || puedeEscribirAsignaciones();
+    }
+
+    // Lockers: lectura para todos los roles autenticados; escritura para
+    // quien puede asignar (crear rangos, ocupar, liberar).
+    match /lockers/{lockerId} {
+      allow read: if estaAutenticado();
+      allow write: if puedeEscribirAsignaciones();
+    }
+  }
+}

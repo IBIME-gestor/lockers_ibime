@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply font-body bg-panel-50 text-panel-900;
+}
+
+/*
+  Logo de IBIME como marca de agua de fondo.
+  Se usa un degradado sólido semitransparente ENCIMA del logo para que el
+  contenido y el texto sigan siendo perfectamente legibles; el logo solo se
+  asoma de fondo. Se aplica en el panel principal (.bg-brand) y en el
+  fondo oscuro de la pantalla de login (.login-bg).
+*/
+.bg-brand {
+  background-image: linear-gradient(
+      rgba(244, 246, 246, 0.94),
+      rgba(244, 246, 246, 0.94)
+    ),
+    url('/logo-ibime.webp');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: auto, min(45vw, 560px);
+  background-attachment: fixed;
+}
+
+.login-bg {
+  background-color: #1c2829;
+  background-image: linear-gradient(
+      rgba(28, 40, 41, 0.93),
+      rgba(28, 40, 41, 0.93)
+    ),
+    url('/logo-ibime.webp');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: auto, min(55vw, 620px);
+}
+
+h1, h2, h3 {
+  font-family: '"Space Grotesk"', sans-serif;
+}
+
+::selection {
+  @apply bg-brass-400/30;
+}
+
+.input {
+  @apply w-full rounded-md border border-panel-200 bg-white px-3 py-2 text-sm focus:border-panel-500 focus:outline-none;
+}
