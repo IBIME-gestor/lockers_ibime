@@ -6,6 +6,7 @@ import {
   guardarAsignaciones,
 } from '../services/lockers'
 import { generarPropuestaAsignacion } from '../utils/assignmentAlgorithm'
+import { formatoLocker } from '../utils/lockerFormat'
 import { useAuth } from '../context/AuthContext'
 
 const PLANTAS = ['Planta baja', 'Primer piso', 'Segundo piso']
@@ -34,50 +35,34 @@ export default function AsignarLockers() {
   const [guardando, setGuardando] = useState(false)
 
   /*
-   * Cargar automáticamente los grupos existentes en Firestore.
+   * Carga automáticamente los grupos existentes en Firebase.
    *
-   * Si:
-   *   Grupo de español
-   *
-   * se toman los valores de:
-   *   alumno.grupoEspanol
-   *
-   * Si:
-   *   Grupo de inglés
-   *
-   * se toman los valores de:
-   *   alumno.grupoIngles
+   * grupoEspanol -> grupos de español
+   * grupoIngles  -> grupos de inglés
    */
   useEffect(() => {
     async function cargarGrupos() {
       setCargandoGrupos(true)
-      setMensaje('')
       setValorGrupo('')
+      setMensaje('')
 
       try {
         const alumnos = await obtenerAlumnos()
 
-        const gruposEncontrados = alumnos
-          .map((alumno) => alumno[tipoFiltro])
-          .filter((grupo) => grupo !== undefined && grupo !== null)
-          .map((grupo) => String(grupo).trim())
-          .filter(Boolean)
+        let grupos = [
+          ...new Set(
+            alumnos
+              .map((alumno) => alumno[tipoFiltro])
+              .filter(
+                (grupo) =>
+                  grupo !== undefined &&
+                  grupo !== null &&
+                  String(grupo).trim() !== ''
+              )
+              .map((grupo) => String(grupo).trim())
+          ),
+        ]
 
-        // Eliminar duplicados
-        let grupos = [...new Set(gruposEncontrados)]
-
-        /*
-         * Orden natural:
-         * 1A
-         * 1B
-         * 2A
-         * 10A
-         *
-         * en lugar de:
-         * 1A
-         * 10A
-         * 2A
-         */
         grupos.sort((a, b) =>
           a.localeCompare(b, undefined, {
             numeric: true,
@@ -86,13 +71,10 @@ export default function AsignarLockers() {
         )
 
         /*
-         * Si es tutor, limitar los grupos a los que tiene asignados.
+         * Los tutores solo pueden trabajar con sus grupos.
          *
-         * perfil.grupos debe ser un array como:
-         *
-         * grupos: ['1A', '1B']
-         *
-         * Para administrador y supervisor se muestran todos.
+         * Ejemplo:
+         * grupos: ['1 aqua', '1 beta']
          */
         if (perfil?.rol === 'tutor') {
           const gruposTutor = Array.isArray(perfil.grupos)
@@ -117,9 +99,6 @@ export default function AsignarLockers() {
     cargarGrupos()
   }, [tipoFiltro, perfil])
 
-  /*
-   * Genera la propuesta automática de lockers.
-   */
   async function generarPropuesta() {
     if (!valorGrupo || !numeroInicio || !numeroFin) {
       setMensaje(
@@ -159,6 +138,7 @@ export default function AsignarLockers() {
         setMensaje(
           `No se encontraron alumnos en el grupo "${valorGrupo}".`
         )
+
         setAlumnosFiltrados([])
         setFilas([])
         setSinLocker([])
@@ -168,7 +148,7 @@ export default function AsignarLockers() {
       setAlumnosFiltrados(alumnos)
 
       /*
-       * Crear los lockers del rango si todavía no existen.
+       * Crear lockers si todavía no existen.
        */
       await generarRangoLockers(
         edificio,
@@ -178,16 +158,13 @@ export default function AsignarLockers() {
       )
 
       /*
-       * Obtener lockers de esa ubicación.
+       * Obtener lockers de la ubicación.
        */
       const lockers = await obtenerLockersPorUbicacion(
         edificio,
         planta
       )
 
-      /*
-       * Quedarnos únicamente con el rango seleccionado.
-       */
       const lockersEnRango = lockers.filter(
         (locker) =>
           locker.numero >= inicio &&
@@ -199,27 +176,18 @@ export default function AsignarLockers() {
       /*
        * Generar propuesta automática.
        */
-      const {
-        propuesta,
-        sinLocker: alumnosSinLocker,
-      } = generarPropuestaAsignacion(
+      const resultado = generarPropuestaAsignacion(
         alumnos,
         lockersEnRango
       )
 
-      setFilas(propuesta)
-      setSinLocker(alumnosSinLocker)
-
-      if (propuesta.length === 0) {
-        setMensaje(
-          'No se pudo generar ninguna asignación con los lockers disponibles.'
-        )
-      }
+      setFilas(resultado.propuesta)
+      setSinLocker(resultado.sinLocker)
     } catch (error) {
       console.error('Error generando propuesta:', error)
 
       setMensaje(
-        'Ocurrió un error al generar la propuesta. Revisa la consola para más detalles.'
+        'Ocurrió un error al generar la propuesta.'
       )
 
       setFilas([])
@@ -230,8 +198,10 @@ export default function AsignarLockers() {
   }
 
   /*
-   * Intercambia lockers entre dos alumnos si el usuario
-   * selecciona un locker que ya estaba propuesto para otra fila.
+   * Cambiar locker manualmente.
+   *
+   * Si el locker ya está asignado a otra fila de la propuesta,
+   * se intercambian los lockers.
    */
   function cambiarLockerDeFila(indice, nuevoLockerId) {
     setFilas((prev) => {
@@ -239,9 +209,7 @@ export default function AsignarLockers() {
         (locker) => locker.id === nuevoLockerId
       )
 
-      if (!nuevoLocker) {
-        return prev
-      }
+      if (!nuevoLocker) return prev
 
       const copia = [...prev]
 
@@ -270,7 +238,7 @@ export default function AsignarLockers() {
   }
 
   /*
-   * Guardar las asignaciones definitivamente en Firestore.
+   * Guardar definitivamente las asignaciones.
    */
   async function confirmarYGuardar() {
     if (filas.length === 0) {
@@ -302,7 +270,7 @@ export default function AsignarLockers() {
       console.error('Error guardando asignaciones:', error)
 
       setMensaje(
-        'Ocurrió un error al guardar las asignaciones. Intenta de nuevo.'
+        'Ocurrió un error al guardar las asignaciones.'
       )
     } finally {
       setGuardando(false)
@@ -316,14 +284,14 @@ export default function AsignarLockers() {
       </h1>
 
       <p className="mb-6 text-panel-500">
-        Filtra un grupo, define la ubicación y el rango de lockers a
-        entregar, y revisa la propuesta antes de guardarla.
+        Filtra un grupo, define la ubicación y el rango de lockers a entregar,
+        y revisa la propuesta antes de guardarla.
       </p>
 
       {/* FILTROS */}
       <div className="mb-6 grid grid-cols-1 gap-4 rounded-md border border-panel-200 bg-white p-5 sm:grid-cols-2 lg:grid-cols-3">
 
-        {/* FILTRAR POR */}
+        {/* TIPO DE GRUPO */}
         <Campo etiqueta="Filtrar por">
           <select
             value={tipoFiltro}
@@ -431,7 +399,7 @@ export default function AsignarLockers() {
         </Campo>
       </div>
 
-      {/* BOTÓN GENERAR */}
+      {/* GENERAR */}
       <button
         onClick={generarPropuesta}
         disabled={
@@ -455,12 +423,11 @@ export default function AsignarLockers() {
         </p>
       )}
 
-      {/* ALUMNOS SIN LOCKER */}
+      {/* SIN LOCKER */}
       {sinLocker.length > 0 && (
         <p className="mb-4 text-sm text-alert">
           {sinLocker.length} alumnos no tienen locker disponible
-          en este rango. Amplía el rango o genera otra ubicación
-          para ellos.
+          en este rango. Amplía el rango o genera otra ubicación.
         </p>
       )}
 
@@ -507,9 +474,7 @@ export default function AsignarLockers() {
                             key={locker.id}
                             value={locker.id}
                           >
-                            {locker.edificio}-
-                            {locker.planta}-
-                            {locker.numero}
+                            {formatoLocker(locker)}
                           </option>
                         ))}
                       </select>
@@ -520,7 +485,6 @@ export default function AsignarLockers() {
             </table>
           </div>
 
-          {/* GUARDAR */}
           <button
             onClick={confirmarYGuardar}
             disabled={guardando}
